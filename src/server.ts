@@ -3,17 +3,17 @@ import http from "http";
 import { Server } from "socket.io";
 import fs from "fs";
 import path from "path";
-import { OpenAIApi, Configuration } from "openai";
+import OpenAI from "openai";
+import dotenv from "dotenv";
+dotenv.config();
 
 const app: express.Application = express();
 const server: http.Server = http.createServer(app);
 const io: Server = new Server(server);
 
-// OpenAI APIの設定
-const configuration = new Configuration({
-  apiKey: process.env.OPENAI_API_KEY, // 環境変数からAPIキーを取得
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
 });
-const openai = new OpenAIApi(configuration);
 
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "../index.html"));
@@ -26,14 +26,14 @@ io.on("connection", (socket) => {
       "../converted/converted_audio.webm"
     );
     fs.writeFileSync(convertedFilePath, audioBlob);
+    console.log("file created");
 
-    // Whisper APIを使用して文字起こし
     try {
-      const response = await openai.createTranscription({
-        model: "whisper-1", // モデル指定
-        file: fs.createReadStream(convertedFilePath), // ファイル読み込み
+      const response = await openai.audio.transcriptions.create({
+        model: "whisper-1",
+        file: fs.createReadStream(convertedFilePath),
       });
-      console.log(response.text); // 文字起こし結果の表示
+      console.log(response.text);
       socket.emit("transcription", response.text);
     } catch (error) {
       console.error("Error in transcription:", error);

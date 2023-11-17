@@ -43,7 +43,7 @@
         // サーバーからの文字起こし結果を受信
         socket.on("transcription", (transcription) => {
           const transcriptionElement = document.getElementById("transcription");
-          transcriptionElement.textContent = transcription; // 結果を表示
+          transcriptionElement.textContent = transcription;
         });
       });
     </script>

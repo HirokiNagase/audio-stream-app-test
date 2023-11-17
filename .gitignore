@@ -1,0 +1,5 @@
+.env
+/node_modules
+converted/converted_audio.webm
+/dist
+/temp

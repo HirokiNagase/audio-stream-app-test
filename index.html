@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Audio Stream App</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+      document.addEventListener("DOMContentLoaded", () => {
+        const startButton = document.getElementById("start");
+        const stopButton = document.getElementById("stop");
+        const socket = io();
+        let mediaRecorder;
+
+        startButton.addEventListener("click", () => {
+          navigator.mediaDevices
+            .getUserMedia({ audio: true, video: false })
+            .then((stream) => {
+              mediaRecorder = new MediaRecorder(stream, {
+                mimeType: "audio/webm",
+              });
+              mediaRecorder.start();
+
+              let audioChunks = [];
+
+              mediaRecorder.ondataavailable = (event) => {
+                audioChunks.push(event.data);
+              };
+
+              mediaRecorder.onstop = () => {
+                const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
+                socket.emit("audio", audioBlob);
+                audioChunks = [];
+              };
+            })
+            .catch((err) => {
+              console.error("Error:", err);
+            });
+        });
+
+        stopButton.addEventListener("click", () => {
+          mediaRecorder.stop();
+        });
+
+        // サーバーからの文字起こし結果を受信
+        socket.on("transcription", (transcription) => {
+          const transcriptionElement = document.getElementById("transcription");
+          transcriptionElement.textContent = transcription; // 結果を表示
+        });
+      });
+    </script>
+  </head>
+  <body>
+    <h1>Audio Stream App</h1>
+    <button id="start">Start Recording</button>
+    <button id="stop">Stop Recording</button>
+    <div id="transcription">Transcription will appear here...</div>
+  </body>
+</html>

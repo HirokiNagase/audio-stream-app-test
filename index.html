@@ -5,53 +5,71 @@
     <script src="/socket.io/socket.io.js"></script>
     <script>
       document.addEventListener("DOMContentLoaded", () => {
-        const startButton = document.getElementById("start");
-        const stopButton = document.getElementById("stop");
+        const recordButton = document.getElementById("record");
+        const conversation = document.getElementById("conversation");
+        const statusElement = document.getElementById("status");
         const socket = io();
         let mediaRecorder;
+        let isRecording = false;
 
-        startButton.addEventListener("click", () => {
-          navigator.mediaDevices
-            .getUserMedia({ audio: true, video: false })
-            .then((stream) => {
-              mediaRecorder = new MediaRecorder(stream, {
-                mimeType: "audio/webm",
+        recordButton.addEventListener("click", () => {
+          if (!isRecording) {
+            navigator.mediaDevices
+              .getUserMedia({ audio: true, video: false })
+              .then((stream) => {
+                mediaRecorder = new MediaRecorder(stream, {
+                  mimeType: "audio/webm",
+                });
+                mediaRecorder.start();
+                isRecording = true;
+                statusElement.textContent = "録音中...";
+
+                let audioChunks = [];
+                mediaRecorder.ondataavailable = (event) => {
+                  audioChunks.push(event.data);
+                };
+
+                mediaRecorder.onstop = () => {
+                  const audioBlob = new Blob(audioChunks, {
+                    type: "audio/webm",
+                  });
+                  socket.emit("audio", audioBlob);
+                  audioChunks = [];
+                  statusElement.textContent = "音声テキスト変換中...";
+                };
+              })
+              .catch((err) => {
+                console.error("Error:", err);
               });
-              mediaRecorder.start();
-
-              let audioChunks = [];
-
-              mediaRecorder.ondataavailable = (event) => {
-                audioChunks.push(event.data);
-              };
-
-              mediaRecorder.onstop = () => {
-                const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
-                socket.emit("audio", audioBlob);
-                audioChunks = [];
-              };
-            })
-            .catch((err) => {
-              console.error("Error:", err);
-            });
+          } else {
+            mediaRecorder.stop();
+            isRecording = false;
+            statusElement.textContent = ""; // 録音中のステータスを消去
+          }
         });
 
-        stopButton.addEventListener("click", () => {
-          mediaRecorder.stop();
-        });
-
-        // サーバーからの文字起こし結果を受信
         socket.on("transcription", (transcription) => {
-          const transcriptionElement = document.getElementById("transcription");
-          transcriptionElement.textContent = transcription;
+          updateConversation("あなた: " + transcription);
+          statusElement.textContent = "AIがテキストを考えている..."; // AI応答待ちのステータスを表示
         });
+
+        socket.on("ai_response", (response) => {
+          updateConversation("AI: " + response);
+          statusElement.textContent = ""; // AI応答後のステータスを消去
+        });
+
+        function updateConversation(text) {
+          let p = document.createElement("p");
+          p.textContent = text;
+          conversation.appendChild(p);
+        }
       });
     </script>
   </head>
   <body>
     <h1>Audio Stream App</h1>
-    <button id="start">Start Recording</button>
-    <button id="stop">Stop Recording</button>
-    <div id="transcription">Transcription will appear here...</div>
+    <button id="record">録音開始/停止</button>
+    <div id="status"></div>
+    <div id="conversation"></div>
   </body>
 </html>

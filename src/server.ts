@@ -33,8 +33,14 @@ io.on("connection", (socket) => {
         model: "whisper-1",
         file: fs.createReadStream(convertedFilePath),
       });
-      console.log(response.text);
+      //   const response = {
+      //     text: "こんにちは。プログラミングの勉強をしようと思っています。まずはどこから勉強すればいいでしょうか?",
+      //   };
       socket.emit("transcription", response.text);
+      //   const responce = Math.random().toString(32).substring(2);
+      //   socket.emit("transcription", responce);
+      const aiResponse = await askAI(response.text); // AIモデルに問い合わせる関数
+      socket.emit("ai_response", aiResponse);
     } catch (error) {
       console.error("Error in transcription:", error);
     }
@@ -45,3 +51,18 @@ const PORT: number = 3000;
 server.listen(PORT, () => {
   console.log(`Listening on *:${PORT}`);
 });
+
+// AIモデルに問い合わせる関数（仮の実装）
+async function askAI(userText: string) {
+  const completion = await openai.chat.completions.create({
+    model: "gpt-3.5-turbo-1106",
+    messages: [
+      {
+        role: "system",
+        content: "You are a kind assistant. Please respond in Japanese.",
+      },
+      { role: "user", content: userText },
+    ],
+  });
+  return completion.choices[0].message.content;
+}

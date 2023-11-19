@@ -12,41 +12,41 @@
         let mediaRecorder;
         let isRecording = false;
 
-        recordButton.addEventListener("click", () => {
-          if (!isRecording) {
-            navigator.mediaDevices
-              .getUserMedia({ audio: true, video: false })
-              .then((stream) => {
-                mediaRecorder = new MediaRecorder(stream, {
-                  mimeType: "audio/webm",
-                });
-                mediaRecorder.start();
-                isRecording = true;
-                statusElement.textContent = "録音中...";
+        // recordButton.addEventListener("click", () => {
+        //   if (!isRecording) {
+        //     navigator.mediaDevices
+        //       .getUserMedia({ audio: true, video: false })
+        //       .then((stream) => {
+        //         mediaRecorder = new MediaRecorder(stream, {
+        //           mimeType: "audio/webm",
+        //         });
+        //         mediaRecorder.start();
+        //         isRecording = true;
+        //         statusElement.textContent = "録音中...";
 
-                let audioChunks = [];
-                mediaRecorder.ondataavailable = (event) => {
-                  audioChunks.push(event.data);
-                };
+        //         let audioChunks = [];
+        //         mediaRecorder.ondataavailable = (event) => {
+        //           audioChunks.push(event.data);
+        //         };
 
-                mediaRecorder.onstop = () => {
-                  const audioBlob = new Blob(audioChunks, {
-                    type: "audio/webm",
-                  });
-                  socket.emit("audio", audioBlob);
-                  audioChunks = [];
-                  statusElement.textContent = "音声テキスト変換中...";
-                };
-              })
-              .catch((err) => {
-                console.error("Error:", err);
-              });
-          } else {
-            mediaRecorder.stop();
-            isRecording = false;
-            statusElement.textContent = ""; // 録音中のステータスを消去
-          }
-        });
+        //         mediaRecorder.onstop = () => {
+        //           const audioBlob = new Blob(audioChunks, {
+        //             type: "audio/webm",
+        //           });
+        //           socket.emit("audio", audioBlob);
+        //           audioChunks = [];
+        //           statusElement.textContent = "音声テキスト変換中...";
+        //         };
+        //       })
+        //       .catch((err) => {
+        //         console.error("Error:", err);
+        //       });
+        //   } else {
+        //     mediaRecorder.stop();
+        //     isRecording = false;
+        //     statusElement.textContent = ""; // 録音中のステータスを消去
+        //   }
+        // });
 
         socket.on("transcription", (transcription) => {
           updateConversation("あなた: " + transcription);
@@ -63,13 +63,109 @@
           p.textContent = text;
           conversation.appendChild(p);
         }
+
+        document
+          .getElementById("joinRoomButton")
+          .addEventListener("click", function () {
+            console.log("roomIdInput");
+            const roomId = document.getElementById("roomIdInput").value;
+            if (roomId) {
+              fetch("/api/join-room", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ roomId: roomId }),
+              })
+                .then((response) => response.json())
+                .then((data) => {
+                  if (data.success) {
+                    document.getElementById("currentRoomId").textContent =
+                      data.room.name;
+                    document.getElementById("errorMessage").textContent = "";
+                    displayMessages(data.messages);
+                    updateButtonStates(true);
+                  } else {
+                    document.getElementById("errorMessage").textContent =
+                      "指定されたルームは存在しません。";
+                  }
+                })
+                .catch((error) => {
+                  console.error("Error:", error);
+                });
+            }
+          });
+
+        // "新しいルームを作成" ボタンのイベントリスナー
+        document
+          .getElementById("createRoomButton")
+          .addEventListener("click", function () {
+            console.log("createRoomButton");
+            fetch("/api/create-room", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+            })
+              .then((response) => response.json())
+              .then((data) => {
+                if (data.success) {
+                  document.getElementById("currentRoomId").textContent =
+                    data.room.name;
+                  document.getElementById("errorMessage").textContent = "";
+                  // 新しいルームに関連する追加のデータ処理
+                  updateButtonStates(true);
+                } else {
+                  document.getElementById("errorMessage").textContent =
+                    "新しいルームの作成に失敗しました。";
+                }
+              })
+              .catch((error) => {
+                console.error("Error:", error);
+              });
+          });
       });
+
+      function displayMessages(messages) {
+        const messageList = document.getElementById("messageList");
+        messageList.innerHTML = ""; // 既存のメッセージをクリア
+        messages.forEach((message) => {
+          const messageElement = document.createElement("p");
+          messageElement.textContent = `${message.userType}: ${message.content}`;
+          messageList.appendChild(messageElement);
+        });
+      }
+
+      function updateButtonStates(isRoomSet) {
+        document.getElementById("recordButton").disabled = !isRoomSet;
+        document.getElementById("joinRoomButton").disabled = isRoomSet;
+        document.getElementById("createRoomButton").disabled = isRoomSet;
+      }
     </script>
   </head>
   <body>
     <h1>Audio Stream App</h1>
-    <button id="record">録音開始/停止</button>
-    <div id="status"></div>
-    <div id="conversation"></div>
+    <div id="errorMessage" style="color: red"></div>
+
+    <!-- 現在のルームIDを表示 -->
+    <div id="currentRoom">
+      <p>現在のルームID: <span id="currentRoomId">なし</span></p>
+    </div>
+
+    <!-- ルームIDの入力フォーム -->
+    <div>
+      <label for="roomIdInput">ルームIDを入力:</label>
+      <input type="text" id="roomIdInput" placeholder="Room ID" />
+      <button id="joinRoomButton">ルームに参加</button>
+    </div>
+
+    <!-- 新しいルームを作成するボタン -->
+    <div>
+      <button id="createRoomButton">新しいルームを作成</button>
+    </div>
+
+    <button disabled id="recordButton">録音開始/停止</button>
+
+    <div id="messageList"></div>
   </body>
 </html>

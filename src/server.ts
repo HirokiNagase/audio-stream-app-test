@@ -106,8 +106,6 @@ app.post(
         content: message.content,
       };
     });
-    console.log("formattedHistory");
-    console.log(formattedHistory);
 
     try {
       // ディスクに保存されたファイルのパス

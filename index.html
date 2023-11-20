@@ -45,6 +45,7 @@
           formData.append("audio", audioBlob);
           formData.append("roomId", currentRoomId);
           formData.append("history", JSON.stringify(conversationHistory));
+
           showLoadingIndicator();
 
           fetch("/api/process-audio", {
@@ -64,7 +65,7 @@
                 body: JSON.stringify({
                   roomId: currentRoomId,
                   text: data.convertedText,
-                  history: conversationHistory,
+                  history: JSON.stringify(conversationHistory),
                 }),
               })
                 .then((response) => response.json())

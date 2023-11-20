@@ -141,8 +141,12 @@ app.post(
 );
 
 app.post("/api/request-ai-response", async (req: Request, res: Response) => {
-  const { roomId, text, history } = req.body;
+  const { roomId, text } = req.body;
   try {
+    const history = req.body.history
+      ? JSON.parse(req.body.history as string)
+      : [];
+
     // 会話履歴を整形
     const formattedHistory = history.map((message: any) => {
       return {

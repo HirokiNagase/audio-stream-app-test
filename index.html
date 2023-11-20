@@ -1,62 +1,69 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Audio Stream App</title>
-    <script src="/socket.io/socket.io.js"></script>
+    <title>Audio Chat App</title>
     <script>
       document.addEventListener("DOMContentLoaded", () => {
-        const recordButton = document.getElementById("recordButton");
-        const conversation = document.getElementById("conversation");
-        const statusElement = document.getElementById("status");
-        const socket = io();
         let mediaRecorder;
-        let isRecording = false;
+        let audioChunks = [];
+        let conversationHistory = [];
 
-        // recordButton.addEventListener("click", () => {
-        //   if (!isRecording) {
-        //     navigator.mediaDevices
-        //       .getUserMedia({ audio: true, video: false })
-        //       .then((stream) => {
-        //         mediaRecorder = new MediaRecorder(stream, {
-        //           mimeType: "audio/webm",
-        //         });
-        //         mediaRecorder.start();
-        //         isRecording = true;
-        //         statusElement.textContent = "録音中...";
+        // 会話の履歴を更新する関数
+        function updateConversationHistory(messages) {
+          conversationHistory = messages;
+        }
 
-        //         let audioChunks = [];
-        //         mediaRecorder.ondataavailable = (event) => {
-        //           audioChunks.push(event.data);
-        //         };
+        document
+          .getElementById("recordButton")
+          .addEventListener("click", () => {
+            if (mediaRecorder && mediaRecorder.state === "recording") {
+              mediaRecorder.stop();
+            } else {
+              const options = { mimeType: "audio/webm" };
+              navigator.mediaDevices
+                .getUserMedia({ audio: true })
+                .then((stream) => {
+                  mediaRecorder = new MediaRecorder(stream, options);
+                  mediaRecorder.start();
+                  mediaRecorder.ondataavailable = (event) => {
+                    audioChunks.push(event.data);
+                  };
+                  mediaRecorder.onstop = async () => {
+                    const audioBlob = new Blob(audioChunks, {
+                      type: "audio/webm",
+                    });
+                    audioChunks = [];
+                    sendAudioToServer(audioBlob);
+                  };
+                });
+            }
+          });
+        function sendAudioToServer(audioBlob) {
+          const currentRoomId =
+            document.getElementById("numRoomId").textContent;
+          const formData = new FormData();
+          formData.append("audio", audioBlob);
+          formData.append("roomId", currentRoomId);
+          formData.append("history", JSON.stringify(conversationHistory)); // 会話の履歴を追加
 
-        //         mediaRecorder.onstop = () => {
-        //           const audioBlob = new Blob(audioChunks, {
-        //             type: "audio/webm",
-        //           });
-        //           socket.emit("audio", audioBlob);
-        //           audioChunks = [];
-        //           statusElement.textContent = "音声テキスト変換中...";
-        //         };
-        //       })
-        //       .catch((err) => {
-        //         console.error("Error:", err);
-        //       });
-        //   } else {
-        //     mediaRecorder.stop();
-        //     isRecording = false;
-        //     statusElement.textContent = ""; // 録音中のステータスを消去
-        //   }
-        // });
-
-        socket.on("transcription", (transcription) => {
-          updateConversation("あなた: " + transcription);
-          statusElement.textContent = "AIがテキストを考えている..."; // AI応答待ちのステータスを表示
-        });
-
-        socket.on("ai_response", (response) => {
-          updateConversation("AI: " + response);
-          statusElement.textContent = ""; // AI応答後のステータスを消去
-        });
+          fetch("/api/process-audio", {
+            method: "POST",
+            body: formData,
+          })
+            .then((response) => response.json())
+            .then((data) => {
+              if (data.success) {
+                console.log("Audio processing successful", data);
+                // 必要に応じて、成功時の処理をここに記述
+                appendMessages(data.history);
+              } else {
+                console.error("Audio processing failed", data.message);
+              }
+            })
+            .catch((error) => {
+              console.error("Error sending audio to server:", error);
+            });
+        }
 
         function updateConversation(text) {
           let p = document.createElement("p");
@@ -82,8 +89,11 @@
                   if (data.success) {
                     document.getElementById("currentRoomId").textContent =
                       data.room.name;
+                    document.getElementById("numRoomId").textContent =
+                      data.room.id;
                     document.getElementById("errorMessage").textContent = "";
                     displayMessages(data.messages);
+                    updateConversationHistory(data.messages);
                     updateButtonStates(true);
                   } else {
                     document.getElementById("errorMessage").textContent =
@@ -112,6 +122,8 @@
                 if (data.success) {
                   document.getElementById("currentRoomId").textContent =
                     data.room.name;
+                  document.getElementById("numRoomId").textContent =
+                    data.room.id;
                   document.getElementById("errorMessage").textContent = "";
                   // 新しいルームに関連する追加のデータ処理
                   updateButtonStates(true);
@@ -135,6 +147,15 @@
           messageList.appendChild(messageElement);
         });
       }
+      function appendMessages(messages) {
+        const messageList = document.getElementById("messageList");
+
+        messages.forEach((message) => {
+          const messageElement = document.createElement("p");
+          messageElement.textContent = `${message.userType}: ${message.content}`;
+          messageList.appendChild(messageElement);
+        });
+      }
 
       function updateButtonStates(isRoomSet) {
         document.getElementById("recordButton").disabled = !isRoomSet;
@@ -149,7 +170,10 @@
 
     <!-- 現在のルームIDを表示 -->
     <div id="currentRoom">
-      <p>現在のルームID: <span id="currentRoomId">なし</span></p>
+      <p>
+        現在のルームID: <span id="currentRoomId">なし</span>
+        <span style="display: none" id="numRoomId"></span>
+      </p>
     </div>
 
     <!-- ルームIDの入力フォーム -->

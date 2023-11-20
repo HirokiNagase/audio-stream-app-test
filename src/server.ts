@@ -1,4 +1,4 @@
-import express from "express";
+import express, { Request, Response } from "express";
 import http from "http";
 import { Server } from "socket.io";
 import fs from "fs";
@@ -7,13 +7,24 @@ import OpenAI from "openai";
 import dotenv from "dotenv";
 import supabase from "../supabese";
 import { v4 as uuidv4 } from "uuid";
-
+import multer from "multer";
 dotenv.config();
 
 const app: express.Application = express();
 const server: http.Server = http.createServer(app);
 const io: Server = new Server(server);
 app.use(express.json());
+
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, "uploads/"); // 保存場所の設定
+  },
+  filename: function (req, file, cb) {
+    cb(null, file.fieldname + "-" + Date.now() + ".webm");
+  },
+});
+
+const upload = multer({ storage: storage });
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -78,33 +89,96 @@ app.post("/api/create-room", async (req, res) => {
   }
 });
 
-io.on("connection", (socket) => {
-  socket.on("audio", async (audioBlob: Buffer) => {
-    const convertedFilePath = path.join(
-      __dirname,
-      "../converted/converted_audio.webm"
-    );
-    fs.writeFileSync(convertedFilePath, audioBlob);
-    console.log("file created");
+app.post(
+  "/api/process-audio",
+  upload.single("audio"),
+  async (req: Request, res: Response) => {
+    if (!req.file) {
+      return res.status(400).send("音声ファイルがありません。");
+    }
+    const roomId = req.body.roomId; // リクエストからルームIDを取得
+    const history = req.body.history
+      ? JSON.parse(req.body.history as string)
+      : [];
+    const formattedHistory = history.map((message: any) => {
+      return {
+        role: message.userType === "user" ? "user" : "assistant",
+        content: message.content,
+      };
+    });
+    console.log("formattedHistory");
+    console.log(formattedHistory);
 
     try {
+      // ディスクに保存されたファイルのパス
+      const filePath = path.resolve(
+        __dirname,
+        "../../uploads",
+        req.file.filename
+      );
+
+      // ReadStreamを作成
+      const fileStream = fs.createReadStream(filePath);
+      // Whisper APIを使用してテキストに変換
+
       const response = await openai.audio.transcriptions.create({
         model: "whisper-1",
-        file: fs.createReadStream(convertedFilePath),
+        file: fileStream,
       });
-      //   const response = {
-      //     text: "こんにちは。プログラミングの勉強をしようと思っています。まずはどこから勉強すればいいでしょうか?",
-      //   };
-      socket.emit("transcription", response.text);
-      //   const responce = Math.random().toString(32).substring(2);
-      //   socket.emit("transcription", responce);
-      const aiResponse = await askAI(response.text); // AIモデルに問い合わせる関数
-      socket.emit("ai_response", aiResponse);
+
+      fs.unlinkSync(filePath);
+      const insertMessagePromise = supabase.from("messages").insert([
+        {
+          roomId,
+          userType: "user",
+          content: response.text,
+        },
+      ]);
+
+      const chatResponsePromise = openai.chat.completions.create({
+        model: "gpt-3.5-turbo",
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a helpful assistant. Please keep your reply to 140 characters or less in Japanese.",
+          },
+          ...formattedHistory, // 会話の履歴を含める
+          { role: "user", content: response.text }, // Whisper APIのテキストを含める
+        ],
+      });
+
+      const [_insertMessage, chatResponse] = await Promise.all([
+        insertMessagePromise,
+        chatResponsePromise,
+      ]);
+      // 新規で作成された返答をDBに保存
+      const responseText = chatResponse.choices[0].message.content;
+      await supabase.from("messages").insert([
+        {
+          roomId,
+          userType: "ai_response",
+          content: responseText,
+        },
+      ]);
+      const history = [
+        {
+          userType: "user",
+          content: response.text,
+        },
+        {
+          userType: "ai_response",
+          content: responseText,
+        },
+      ];
+
+      res.json({ success: true, history });
     } catch (error) {
-      console.error("Error in transcription:", error);
+      console.error("Error processing audio:", error);
+      res.status(500).send("音声処理中にエラーが発生しました。");
     }
-  });
-});
+  }
+);
 
 const PORT: number = 3000;
 server.listen(PORT, () => {

@@ -164,26 +164,41 @@ app.post("/api/request-ai-response", async (req: Request, res: Response) => {
         { role: "user", content: text },
       ],
     });
+    const response = chatResponse.choices[0].message.content;
 
     // 応答をデータベースに保存
     await supabase.from("messages").insert([
       {
         roomId,
         userType: "ai_response",
-        content: chatResponse.choices[0].message.content,
+        content: response,
       },
     ]);
+
+    const speechData = await convertTextToSpeech(response!);
 
     // 応答をクライアントに返す
     res.json({
       success: true,
-      response: chatResponse.choices[0].message.content,
+      response: response,
+      audio: speechData.toString("base64"),
     });
   } catch (error) {
     console.error("Error processing AI response:", error);
     res.status(500).send("AI応答処理中にエラーが発生しました。");
   }
 });
+
+async function convertTextToSpeech(text: string) {
+  const response = await openai.audio.speech.create({
+    model: "tts-1",
+    input: text,
+    voice: "nova",
+    response_format: "opus",
+  });
+
+  return Buffer.from(await response.arrayBuffer());
+}
 
 const PORT: number = 3000;
 server.listen(PORT, () => {

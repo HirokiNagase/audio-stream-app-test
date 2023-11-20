@@ -45,6 +45,7 @@
           formData.append("audio", audioBlob);
           formData.append("roomId", currentRoomId);
           formData.append("history", JSON.stringify(conversationHistory));
+          showLoadingIndicator();
 
           fetch("/api/process-audio", {
             method: "POST",
@@ -71,6 +72,10 @@
                   console.log("AI response received", data.response);
                   // AIの返答を表示する処理
                   addResponse(data.response, false);
+                  if (data.audio) {
+                    playAudioFromServer(data.audio);
+                  }
+                  hideLoadingIndicator();
                 })
                 .catch((error) => {
                   console.error("Error requesting AI response:", error);
@@ -187,6 +192,24 @@
         document.getElementById("joinRoomButton").disabled = isRoomSet;
         document.getElementById("createRoomButton").disabled = isRoomSet;
       }
+
+      function showLoadingIndicator() {
+        document.getElementById("loadingIndicator").style.display = "block";
+      }
+
+      function hideLoadingIndicator() {
+        document.getElementById("loadingIndicator").style.display = "none";
+      }
+
+      function playAudioFromServer(base64Audio) {
+        const audioBlob = new Blob(
+          [Uint8Array.from(atob(base64Audio), (c) => c.charCodeAt(0))],
+          { type: "audio/opus" }
+        );
+        const audioUrl = URL.createObjectURL(audioBlob);
+        const audio = new Audio(audioUrl);
+        audio.play();
+      }
     </script>
   </head>
   <body>
@@ -214,7 +237,34 @@
     </div>
 
     <button disabled id="recordButton">録音開始/停止</button>
+    <div id="loadingIndicator" class="spinner" style="display: none"></div>
 
     <div id="messageList"></div>
   </body>
 </html>
+<style>
+  .spinner {
+    border: 4px solid rgba(0, 0, 0, 0.1);
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border-left-color: #09f;
+
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    margin-top: -18px; /* スピナーの半径分オフセット */
+    margin-left: -18px; /* スピナーの半径分オフセット */
+
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    0% {
+      transform: rotate(0deg);
+    }
+    100% {
+      transform: rotate(360deg);
+    }
+  }
+</style>

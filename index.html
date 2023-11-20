@@ -44,7 +44,7 @@
           const formData = new FormData();
           formData.append("audio", audioBlob);
           formData.append("roomId", currentRoomId);
-          formData.append("history", JSON.stringify(conversationHistory)); // 会話の履歴を追加
+          formData.append("history", JSON.stringify(conversationHistory));
 
           fetch("/api/process-audio", {
             method: "POST",
@@ -52,13 +52,29 @@
           })
             .then((response) => response.json())
             .then((data) => {
-              if (data.success) {
-                console.log("Audio processing successful", data);
-                // 必要に応じて、成功時の処理をここに記述
-                appendMessages(data.history);
-              } else {
-                console.error("Audio processing failed", data.message);
-              }
+              console.log("Audio processing successful", data);
+              addResponse(data.convertedText, true);
+
+              fetch("/api/request-ai-response", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  roomId: currentRoomId,
+                  text: data.convertedText,
+                  history: conversationHistory,
+                }),
+              })
+                .then((response) => response.json())
+                .then((data) => {
+                  console.log("AI response received", data.response);
+                  // AIの返答を表示する処理
+                  addResponse(data.response, false);
+                })
+                .catch((error) => {
+                  console.error("Error requesting AI response:", error);
+                });
             })
             .catch((error) => {
               console.error("Error sending audio to server:", error);
@@ -66,9 +82,18 @@
         }
 
         function updateConversation(text) {
-          let p = document.createElement("p");
+          const p = document.createElement("p");
           p.textContent = text;
           conversation.appendChild(p);
+        }
+
+        function addResponse(response, isUser) {
+          // AIの返答を表示する処理
+          const responseElement = document.createElement("p");
+          const userType = isUser ? "user" : "ai_response";
+
+          responseElement.textContent = `${userType}: ${response}`;
+          document.getElementById("messageList").appendChild(responseElement);
         }
 
         document

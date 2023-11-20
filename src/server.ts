@@ -125,52 +125,14 @@ app.post(
       });
 
       fs.unlinkSync(filePath);
-      const insertMessagePromise = supabase.from("messages").insert([
-        {
-          roomId,
-          userType: "user",
-          content: response.text,
-        },
-      ]);
-
-      const chatResponsePromise = openai.chat.completions.create({
-        model: "gpt-3.5-turbo",
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are a helpful assistant. Please keep your reply to 140 characters or less in Japanese.",
-          },
-          ...formattedHistory, // 会話の履歴を含める
-          { role: "user", content: response.text }, // Whisper APIのテキストを含める
-        ],
-      });
-
-      const [_insertMessage, chatResponse] = await Promise.all([
-        insertMessagePromise,
-        chatResponsePromise,
-      ]);
-      // 新規で作成された返答をDBに保存
-      const responseText = chatResponse.choices[0].message.content;
       await supabase.from("messages").insert([
         {
           roomId,
-          userType: "ai_response",
-          content: responseText,
-        },
-      ]);
-      const history = [
-        {
           userType: "user",
           content: response.text,
         },
-        {
-          userType: "ai_response",
-          content: responseText,
-        },
-      ];
-
-      res.json({ success: true, history });
+      ]);
+      res.json({ success: true, convertedText: response.text });
     } catch (error) {
       console.error("Error processing audio:", error);
       res.status(500).send("音声処理中にエラーが発生しました。");
@@ -178,23 +140,53 @@ app.post(
   }
 );
 
+app.post("/api/request-ai-response", async (req: Request, res: Response) => {
+  const { roomId, text, history } = req.body;
+  console.log(history);
+  try {
+    // 会話履歴を整形
+    const formattedHistory = history.map((message: any) => {
+      return {
+        role: message.userType === "user" ? "user" : "assistant",
+        content: message.content,
+      };
+    });
+
+    // AIによる応答を取得
+    const chatResponse = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo",
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a helpful assistant. Please keep your reply to 140 characters or less in Japanese.",
+        },
+        ...formattedHistory,
+        { role: "user", content: text },
+      ],
+    });
+
+    // 応答をデータベースに保存
+    await supabase.from("messages").insert([
+      {
+        roomId,
+        userType: "ai_response",
+        content: chatResponse.choices[0].message.content,
+      },
+    ]);
+
+    // 応答をクライアントに返す
+    res.json({
+      success: true,
+      response: chatResponse.choices[0].message.content,
+    });
+  } catch (error) {
+    console.error("Error processing AI response:", error);
+    res.status(500).send("AI応答処理中にエラーが発生しました。");
+  }
+});
+
 const PORT: number = 3000;
 server.listen(PORT, () => {
   console.log(`Listening on http://localhost:${PORT}`);
 });
-
-// AIモデルに問い合わせる関数（仮の実装）
-async function askAI(userText: string) {
-  const completion = await openai.chat.completions.create({
-    model: "gpt-3.5-turbo-1106",
-    messages: [
-      {
-        role: "system",
-        content:
-          "You are a kind assistant. Please keep it under 140 characters in Japanese.",
-      },
-      { role: "user", content: userText },
-    ],
-  });
-  return completion.choices[0].message.content;
-}

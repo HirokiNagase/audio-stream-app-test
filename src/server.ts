@@ -171,7 +171,7 @@ app.post("/api/request-ai-response", async (req: Request, res: Response) => {
     const response = chatResponse.choices[0].message.content;
 
     // 応答をデータベースに保存
-    await supabase.from("messages").insert([
+    const saveMessage = supabase.from("messages").insert([
       {
         roomId,
         userType: "ai_response",
@@ -179,7 +179,9 @@ app.post("/api/request-ai-response", async (req: Request, res: Response) => {
       },
     ]);
 
-    const speechData = await convertTextToSpeech(response!);
+    const speechPromise = convertTextToSpeech(response!);
+
+    const [_, speechData] = await Promise.all([saveMessage, speechPromise]);
 
     // 応答をクライアントに返す
     res.json({

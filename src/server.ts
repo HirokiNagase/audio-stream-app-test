@@ -17,7 +17,7 @@ app.use(express.json());
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, "uploads/"); // 保存場所の設定
+    cb(null, "uploads/");
   },
   filename: function (req, file, cb) {
     cb(null, file.fieldname + "-" + Date.now() + ".webm");
@@ -66,14 +66,12 @@ app.post("/api/create-room", async (req, res) => {
   try {
     const roomName = uuidv4();
 
-    // 新しいルームを挿入
     const insertResult = await supabase
       .from("rooms")
       .insert([{ name: roomName }]);
 
     if (insertResult.error) throw insertResult.error;
 
-    // 挿入されたルームを名前で検索して取得
     const { data, error } = await supabase
       .from("rooms")
       .select("*")
@@ -85,7 +83,7 @@ app.post("/api/create-room", async (req, res) => {
     res.json({ success: true, room: data });
   } catch (err) {
     console.error("Error:", err);
-    res.status(500).send("サーバーエラー");
+    res.status(500).send(err);
   }
 });
 
@@ -96,17 +94,7 @@ app.post(
     if (!req.file) {
       return res.status(400).send("音声ファイルがありません。");
     }
-    const roomId = req.body.roomId; // リクエストからルームIDを取得
-    const history = req.body.history
-      ? JSON.parse(req.body.history as string)
-      : [];
-    const formattedHistory = history.map((message: any) => {
-      return {
-        role: message.userType === "user" ? "user" : "assistant",
-        content: message.content,
-      };
-    });
-
+    const roomId = req.body.roomId;
     try {
       // ディスクに保存されたファイルのパス
       const filePath = path.resolve(
@@ -135,7 +123,7 @@ app.post(
       res.json({ success: true, convertedText: response.text });
     } catch (error) {
       console.error("Error processing audio:", error);
-      res.status(500).send("音声処理中にエラーが発生しました。");
+      res.status(500).send(error);
     }
   }
 );
@@ -147,15 +135,12 @@ app.post("/api/request-ai-response", async (req: Request, res: Response) => {
       ? JSON.parse(req.body.history as string)
       : [];
 
-    // 会話履歴を整形
     const formattedHistory = history.map((message: any) => {
       return {
         role: message.userType === "user" ? "user" : "assistant",
         content: message.content,
       };
     });
-
-    // AIによる応答を取得
     const chatResponse = await openai.chat.completions.create({
       model: "gpt-3.5-turbo",
       messages: [
@@ -169,8 +154,6 @@ app.post("/api/request-ai-response", async (req: Request, res: Response) => {
       ],
     });
     const response = chatResponse.choices[0].message.content;
-
-    // 応答をデータベースに保存
     const saveMessage = supabase.from("messages").insert([
       {
         roomId,
@@ -178,12 +161,9 @@ app.post("/api/request-ai-response", async (req: Request, res: Response) => {
         content: response,
       },
     ]);
-
     const speechPromise = convertTextToSpeech(response!);
-
     const [_, speechData] = await Promise.all([saveMessage, speechPromise]);
 
-    // 応答をクライアントに返す
     res.json({
       success: true,
       response: response,
@@ -191,7 +171,7 @@ app.post("/api/request-ai-response", async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error("Error processing AI response:", error);
-    res.status(500).send("AI応答処理中にエラーが発生しました。");
+    res.status(500).send(error);
   }
 });
 

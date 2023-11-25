@@ -8,11 +8,6 @@
         let audioChunks = [];
         let conversationHistory = [];
 
-        // 会話の履歴を更新する関数
-        function updateConversationHistory(messages) {
-          conversationHistory = messages;
-        }
-
         document
           .getElementById("recordButton")
           .addEventListener("click", () => {
@@ -54,9 +49,7 @@
           })
             .then((response) => response.json())
             .then((data) => {
-              console.log("Audio processing successful", data);
               addResponse(data.convertedText, true);
-
               fetch("/api/request-ai-response", {
                 method: "POST",
                 headers: {
@@ -70,8 +63,6 @@
               })
                 .then((response) => response.json())
                 .then((data) => {
-                  console.log("AI response received", data.response);
-                  // AIの返答を表示する処理
                   addResponse(data.response, false);
                   if (data.audio) {
                     playAudioFromServer(data.audio);
@@ -79,7 +70,7 @@
                   hideLoadingIndicator();
                 })
                 .catch((error) => {
-                  console.error("Error requesting AI response:", error);
+                  console.error("Error AI response:", error);
                 });
             })
             .catch((error) => {
@@ -94,7 +85,6 @@
         }
 
         function addResponse(response, isUser) {
-          // AIの返答を表示する処理
           const responseElement = document.createElement("p");
           const userType = isUser ? "user" : "ai_response";
 
@@ -132,7 +122,7 @@
                   }
                 })
                 .catch((error) => {
-                  console.error("Error:", error);
+                  console.error("Error joining room:", error);
                 });
             }
           });
@@ -156,7 +146,6 @@
                   document.getElementById("numRoomId").textContent =
                     data.room.id;
                   document.getElementById("errorMessage").textContent = "";
-                  // 新しいルームに関連する追加のデータ処理
                   updateButtonStates(true);
                 } else {
                   document.getElementById("errorMessage").textContent =
@@ -164,28 +153,25 @@
                 }
               })
               .catch((error) => {
-                console.error("Error:", error);
+                console.error("Error creating room:", error);
               });
           });
       });
 
+      //   メッセージを追加する関数
       function displayMessages(messages) {
         const messageList = document.getElementById("messageList");
-        messageList.innerHTML = ""; // 既存のメッセージをクリア
+        messageList.innerHTML = "";
         messages.forEach((message) => {
           const messageElement = document.createElement("p");
           messageElement.textContent = `${message.userType}: ${message.content}`;
           messageList.appendChild(messageElement);
         });
       }
-      function appendMessages(messages) {
-        const messageList = document.getElementById("messageList");
 
-        messages.forEach((message) => {
-          const messageElement = document.createElement("p");
-          messageElement.textContent = `${message.userType}: ${message.content}`;
-          messageList.appendChild(messageElement);
-        });
+      // 会話の履歴を更新する関数
+      function updateConversationHistory(messages) {
+        conversationHistory = messages;
       }
 
       function updateButtonStates(isRoomSet) {
